@@ -9,7 +9,8 @@
 	type Triangle = [number, number, number]; // x, y, rotation
 	type Circle = [number, number]; // x, y
 	type Diamond = [number, number]; // x, y
-	type Sprite = { Triangle?: Triangle; Circle?: Circle; Diamond?: Diamond };
+	type Square = [number, number]; // x, y
+	type Sprite = { Triangle?: Triangle; Circle?: Circle; Diamond?: Diamond; Square?: Square };
 
 	let canvas: HTMLCanvasElement;
 	let ctx: CanvasRenderingContext2D | null;
@@ -43,6 +44,10 @@
 				if (sprite.Diamond) {
 					const [x, y] = sprite.Diamond;
 					drawDiamond(x, y);
+				}
+				if (sprite.Square) {
+					const [x, y] = sprite.Square;
+					drawSquare(x, y);
 				}
 			});
 		}
@@ -85,6 +90,20 @@
 			ctx.lineTo(x - 20, y);
 			ctx.closePath();
 			ctx.fillStyle = 'blue';
+			ctx.fill();
+		}
+	}
+
+	function drawSquare(x: number, y: number): void {
+		// Multiplier had radius 5 in backend so R^2 + R^2 = S^2 => S/2 = sqrt(2) * R / 2  = 7.07/2 = 3.53
+		if (ctx !== null) {
+			ctx.beginPath();
+			ctx.moveTo(x - 3.53, y - 3.53);
+			ctx.lineTo(x - 3.53, y + 3.53);
+			ctx.lineTo(x + 3.53, y + 3.53);
+			ctx.lineTo(x + 3.53, y - 3.53);
+			ctx.closePath();
+			ctx.fillStyle = 'green';
 			ctx.fill();
 		}
 	}

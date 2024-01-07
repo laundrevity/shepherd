@@ -1,5 +1,6 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![feature(extract_if)]
 
 use rand::{thread_rng, Rng};
 use serde::Serialize;
@@ -7,20 +8,39 @@ use std::collections::HashMap;
 use tauri::{async_runtime::RwLock, State, Window};
 use tokio::time::{sleep, Duration};
 
-const WINDOW_WIDTH: usize = 1200;
-const WINDOW_HEIGHT: usize = 800;
+const WINDOW_WIDTH: f64 = 1200.0;
+const WINDOW_HEIGHT: f64 = 800.0;
 
-const PLAYER_SPEED: usize = 5;
-const ENEMY_SPEED: usize = 2;
+const PLAYER_SPEED: f64 = 5.0;
+const ENEMY_SPEED: f64 = 2.0;
 
 const TICK_CYCLE_MS: u64 = 16;
 const SPAWN_INTERVAL: u64 = 5000;
 
+const CIRCLE_RADIUS: f64 = 20.0;
+const DIAMOND_RADIUS: f64 = 20.0;
+const TRIANGLE_RADIUS: f64 = 50.0;
+const SQUARE_RADIUS: f64 = 5.0;
+
+const BOOM_RADIUS: f64 = 250.0;
+
 #[derive(Clone, Debug, Serialize)]
 enum Sprite {
-    Triangle(usize, usize, usize), // x coordinate, y coordinate, rotation
-    Circle(usize, usize),
-    Diamond(usize, usize),
+    Triangle(f64, f64, f64), // x coordinate, y coordinate, rotation
+    Circle(f64, f64),
+    Diamond(f64, f64),
+    Square(f64, f64),
+}
+
+impl Sprite {
+    fn get_coords(&self) -> (f64, f64) {
+        match self {
+            Sprite::Triangle(x, y, _) => (*x, *y),
+            Sprite::Circle(x, y) => (*x, *y),
+            Sprite::Diamond(x, y) => (*x, *y),
+            Sprite::Square(x, y) => (*x, *y),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -28,6 +48,9 @@ struct Game {
     player: Sprite,
     triangles: Vec<Sprite>,
     diamonds: Vec<Sprite>,
+    multipliers: Vec<Sprite>,
+    score: u64,
+    multiplier: u64,
     key_states: HashMap<String, bool>,
 }
 
@@ -38,53 +61,115 @@ struct AppState {
 impl Game {
     fn new() -> Self {
         Self {
-            player: Sprite::Circle(200, 200),
-            triangles: vec![Sprite::Triangle(100, 100, 0)],
+            player: Sprite::Circle(200.0, 200.0),
+            triangles: vec![Sprite::Triangle(100.0, 100.0, 0.0)],
             diamonds: Vec::new(),
+            multipliers: Vec::new(),
+            score: 0,
+            multiplier: 1,
             key_states: HashMap::new(),
         }
+    }
+
+    fn boom(&mut self, bx: f64, by: f64) {
+        // TODO: send an explosion animation to the frontend
+        let boomed_diamonds = self
+            .diamonds
+            .extract_if(|diamond| {
+                let (dx, dy) = diamond.get_coords();
+                // Keep the diamonds too far from the explosion
+                ((dx - bx).powi(2) + (dy - by).powi(2)).sqrt() < BOOM_RADIUS
+            })
+            .collect::<Vec<Sprite>>();
+
+        for diamond in boomed_diamonds {
+            let (dx, dy) = diamond.get_coords();
+            // increment score and create a multiplier
+            self.score += self.multiplier;
+            self.multipliers.push(Sprite::Square(dx, dy));
+        }
+    }
+
+    fn get_triangle_vertices(&self, x: f64, y: f64, rotation: f64) -> Vec<(f64, f64)> {
+        // R = s / sqrt(3)
+        // R: radius of circumscribing circle
+        // s: side of circumscribed triangle
+        let mut vertices = Vec::new();
+        let side_length = (3.0f64).sqrt() * TRIANGLE_RADIUS;
+        let height = side_length * (3.0f64).sqrt() / 2.0;
+
+        for i in 0..3 {
+            let angle = 2.0 * std::f64::consts::PI / 3.0 * i as f64 + rotation.to_radians();
+            vertices.push((x + height * angle.cos(), y + height * angle.sin()));
+        }
+
+        vertices
     }
 
     fn get_sprites(&self) -> Vec<Sprite> {
         let mut sprites = vec![self.player.clone()];
         sprites.extend(self.triangles.clone());
         sprites.extend(self.diamonds.clone());
+        sprites.extend(self.multipliers.clone());
         sprites
     }
 
     fn tick(&mut self) {
-        // Rotate the triangle
+        self.rotate_triangles();
+        self.move_player();
+        self.move_enemies();
+
+        self.check_collisions();
+    }
+
+    fn rotate_triangles(&mut self) {
         for triangle in self.triangles.iter_mut() {
             if let Sprite::Triangle(_, _, ref mut rot) = triangle {
-                *rot = (*rot + 1) % 360;
+                *rot += 1.0;
             }
         }
+    }
 
-        // Update circle position based on key states
+    fn move_player(&mut self) {
         if let Sprite::Circle(ref mut x, ref mut y) = self.player {
+            let mut dx = 0.0;
+            let mut dy = 0.0;
+
             if *self.key_states.get("w").unwrap_or(&false) {
-                *y = y.saturating_sub(PLAYER_SPEED).max(20);
+                dy -= PLAYER_SPEED as f64;
             }
             if *self.key_states.get("a").unwrap_or(&false) {
-                *x = x.saturating_sub(PLAYER_SPEED).max(20);
+                dx -= PLAYER_SPEED as f64;
             }
             if *self.key_states.get("s").unwrap_or(&false) {
-                *y = (*y + PLAYER_SPEED).min(WINDOW_HEIGHT - 20);
+                dy += PLAYER_SPEED as f64;
             }
             if *self.key_states.get("d").unwrap_or(&false) {
-                *x = (*x + PLAYER_SPEED).min(WINDOW_WIDTH - 20);
+                dx += PLAYER_SPEED as f64;
             }
-        }
 
-        self.move_enemies();
+            // Scale speed for diagonal movement
+            let speed_scale = if dx != 0.0 && dy != 0.0 {
+                (2f64).sqrt() / 2.0
+            } else {
+                1.0
+            };
+
+            *x = (*x + dx * speed_scale)
+                .max(20.0)
+                .min(WINDOW_WIDTH as f64 - 20.0);
+            *y = (*y + dy * speed_scale)
+                .max(20.0)
+                .min(WINDOW_HEIGHT as f64 - 20.0);
+        }
     }
 
     fn spawn_enemy(&mut self) {
         let mut rng = thread_rng();
         let (x, y) = match rng.gen_range(0..4) {
-            0 => (0, 0),
-            1 => (WINDOW_WIDTH, 0),
-            2 => (0, WINDOW_HEIGHT),
+            0 => (0.0, 0.0),
+            1 => (WINDOW_WIDTH, 0.0),
+            2 => (0.0, WINDOW_HEIGHT),
             _ => (WINDOW_WIDTH, WINDOW_HEIGHT),
         };
 
@@ -92,43 +177,152 @@ impl Game {
     }
 
     fn move_enemies(&mut self) {
-        let (player_x, player_y) = if let Sprite::Circle(x, y) = self.player {
-            (x, y)
-        } else {
-            return;
+        let (player_x, player_y) = match self.player {
+            Sprite::Circle(x, y) => (x as f64, y as f64),
+            _ => return,
         };
 
-        self.diamonds
-            .iter_mut()
-            .filter_map(|sprite| {
-                if let Sprite::Diamond(ref mut x, ref mut y) = sprite {
-                    Some((x, y))
-                } else {
-                    None
-                }
-            })
-            .for_each(|(x, y)| {
-                if *x < player_x {
-                    *x += ENEMY_SPEED.min(player_x - *x);
-                } else if *x > player_x {
-                    *x -= ENEMY_SPEED.min(*x - player_x);
-                }
+        for diamond in self.diamonds.iter_mut() {
+            if let Sprite::Diamond(ref mut x, ref mut y) = diamond {
+                let dx = player_x - *x;
+                let dy = player_y - *y;
+                let distance = (dx * dx + dy * dy).sqrt();
 
-                if *y < player_y {
-                    *y += ENEMY_SPEED.min(player_y - *y);
-                } else if *y > player_y {
-                    *y -= ENEMY_SPEED.min(*y - player_y);
+                if distance > ENEMY_SPEED {
+                    *x = (*x + dx / distance * ENEMY_SPEED as f64).round();
+                    *y = (*y + dy / distance * ENEMY_SPEED as f64).round();
                 }
-            });
+            }
+        }
     }
 
-    // Add methods to update key states
+    fn check_collisions(&mut self) {
+        // check diamond-circle collision (= game over)
+        if let Sprite::Circle(circle_x, circle_y) = self.player {
+            for diamond in &self.diamonds {
+                if let Sprite::Diamond(diamond_x, diamond_y) = diamond {
+                    let distance =
+                        ((circle_x - diamond_x).powi(2) + (circle_y - diamond_y).powi(2)).sqrt();
+                    if distance < (CIRCLE_RADIUS + DIAMOND_RADIUS) {
+                        println!("Collision with diamond!");
+                        print!(
+                            "Game over!\nScore: {}\nMultiplier: {}\n",
+                            self.score, self.multiplier
+                        );
+                        std::process::exit(0);
+                    }
+                }
+            }
+        };
+
+        let (circle_x, circle_y, circle_radius) = match self.player {
+            Sprite::Circle(x, y) => (x, y, CIRCLE_RADIUS),
+            _ => panic!("Missing player sprite"),
+        };
+
+        let mut boom_triangles_indices = Vec::new();
+
+        for (index, triangle) in self.triangles.iter().enumerate() {
+            if let Sprite::Triangle(tx, ty, rot) = triangle {
+                let vertices = self.get_triangle_vertices(*tx, *ty, *rot);
+
+                if self.circle_collides_with_triangle_edges(
+                    circle_x,
+                    circle_y,
+                    circle_radius,
+                    &vertices,
+                ) {
+                    println!("Collision with triangle edge!");
+                    boom_triangles_indices.push(index);
+                }
+
+                if self.circle_collides_with_triangle_corners(
+                    circle_x,
+                    circle_y,
+                    circle_radius,
+                    &vertices,
+                ) {
+                    println!("Collision with triangle corner!");
+                    print!(
+                        "Game over!\nScore: {}\nMultiplier: {}\n",
+                        self.score, self.multiplier
+                    );
+                    std::process::exit(0);
+                }
+            }
+        }
+
+        // Process the booms in reverse order to avoid index shifting issues
+        for index in boom_triangles_indices.iter().rev() {
+            let (tx, ty) = self.triangles[*index].get_coords();
+            self.boom(tx, ty);
+            self.triangles.remove(*index);
+        }
+
+        // Now check multiplier collisions
+        let (px, py) = self.player.get_coords();
+        let consumed_multipliers = self.multipliers.extract_if(|mult| {
+            let (mx, my) = mult.get_coords();
+            let distance = ((px - mx).powi(2) + (py - my).powi(2)).sqrt();
+            distance < (CIRCLE_RADIUS + SQUARE_RADIUS)
+        });
+
+        for _mult in consumed_multipliers {
+            self.multiplier += 1;
+        }
+    }
+
     fn key_down(&mut self, key: String) {
         self.key_states.insert(key, true);
     }
 
     fn key_up(&mut self, key: String) {
         self.key_states.insert(key, false);
+    }
+
+    fn circle_collides_with_triangle_edges(
+        &self,
+        cx: f64,                 // Circle's center x-coordinate
+        cy: f64,                 // Circle's center y-coordinate
+        radius: f64,             // Circle's radius
+        vertices: &[(f64, f64)], // Triangle vertices
+    ) -> bool {
+        vertices
+            .iter()
+            .zip(vertices.iter().cycle().skip(1))
+            .any(|(&(x1, y1), &(x2, y2))| {
+                // Calculate the vector components of the edge
+                let dx = x2 - x1;
+                let dy = y2 - y1;
+
+                // Quadratic formula coefficients
+                let a = dx * dx + dy * dy; // Coefficient of t^2
+                let b = 2.0 * (dx * (x1 - cx) + dy * (y1 - cy)); // Coefficient of t
+                let c = x1 * x1 + y1 * y1 + cx * cx + cy * cy
+                    - 2.0 * (x1 * cx + y1 * cy)
+                    - radius * radius; // Constant term
+
+                // Discriminant of the quadratic equation
+                let det = b * b - 4.0 * a * c;
+
+                // Check for intersection: det > 0 indicates two solutions (intersections)
+                // The intersection points must lie within the segment (0 <= t <= 1)
+                det > 0.0 && -b / (2.0 * a) > 0.0 && -b / (2.0 * a) < 1.0
+            })
+    }
+
+    fn circle_collides_with_triangle_corners(
+        &self,
+        cx: f64,
+        cy: f64,
+        radius: f64,
+        vertices: &[(f64, f64)],
+    ) -> bool {
+        vertices.iter().any(|&(vx, vy)| {
+            let dx = cx - vx;
+            let dy = cy - vy;
+            dx * dx + dy * dy < radius * radius
+        })
     }
 }
 
@@ -170,7 +364,7 @@ async fn key_up(state: State<'_, AppState>, key: String) -> Result<(), tauri::Er
     Ok(())
 }
 #[tauri::command]
-fn get_window_size() -> (usize, usize) {
+fn get_window_size() -> (f64, f64) {
     (WINDOW_WIDTH, WINDOW_HEIGHT)
 }
 
