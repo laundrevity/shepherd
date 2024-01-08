@@ -95,18 +95,37 @@ impl Sprite {
 }
 
 #[derive(Clone, Debug)]
-struct Game {
-    player: Sprite,
-    triangles: Vec<Sprite>,
-    diamonds: Vec<Sprite>,
-    multipliers: Vec<Sprite>,
+struct GameData {
     score: u64,
     multiplier: u64,
     key_states: HashMap<String, bool>,
     pending_boom_locations: Vec<(f64, f64)>,
     paused: bool,
     spawn_count: usize,
-    game_over: bool,
+    over: bool,
+}
+
+impl GameData {
+    fn new() -> Self {
+        Self {
+            score: 0,
+            multiplier: 1,
+            key_states: HashMap::new(),
+            pending_boom_locations: Vec::new(),
+            paused: false,
+            spawn_count: 1,
+            over: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Game {
+    player: Sprite,
+    triangles: Vec<Sprite>,
+    diamonds: Vec<Sprite>,
+    multipliers: Vec<Sprite>,
+    game_data: GameData,
 }
 
 struct AppState {
@@ -120,25 +139,16 @@ impl Game {
             triangles: Vec::new(),
             diamonds: Vec::new(),
             multipliers: Vec::new(),
-            score: 0,
-            multiplier: 1,
-            key_states: HashMap::new(),
-            pending_boom_locations: Vec::new(),
-            paused: false,
-            spawn_count: 1,
-            game_over: false,
+            game_data: GameData::new(),
         }
     }
 
     fn reset_game(&mut self) {
-        self.score = 0;
-        self.multiplier = 1;
-        self.spawn_count = 1;
-        self.player = Sprite::Circle(200.0, 200.0);
+        self.player = Sprite::Circle(WINDOW_WIDTH/2.0, WINDOW_HEIGHT/2.0);
         self.triangles.clear();
         self.diamonds.clear();
         self.multipliers.clear();
-        self.game_over = false;
+        self.game_data = GameData::new();
     }
 
     fn boom(&mut self, bx: f64, by: f64) {
@@ -155,7 +165,7 @@ impl Game {
         for diamond in boomed_diamonds {
             let (dx, dy) = diamond.get_coords();
             // increment score and create a multiplier
-            self.score += self.multiplier;
+            self.game_data.score += self.game_data.multiplier;
             self.multipliers.push(Sprite::Square(dx, dy));
         }
     }
@@ -190,16 +200,16 @@ impl Game {
             let mut dx = 0.0;
             let mut dy = 0.0;
 
-            if *self.key_states.get("w").unwrap_or(&false) {
+            if *self.game_data.key_states.get("w").unwrap_or(&false) {
                 dy -= PLAYER_SPEED as f64;
             }
-            if *self.key_states.get("a").unwrap_or(&false) {
+            if *self.game_data.key_states.get("a").unwrap_or(&false) {
                 dx -= PLAYER_SPEED as f64;
             }
-            if *self.key_states.get("s").unwrap_or(&false) {
+            if *self.game_data.key_states.get("s").unwrap_or(&false) {
                 dy += PLAYER_SPEED as f64;
             }
-            if *self.key_states.get("d").unwrap_or(&false) {
+            if *self.game_data.key_states.get("d").unwrap_or(&false) {
                 dx += PLAYER_SPEED as f64;
             }
 
@@ -239,13 +249,13 @@ impl Game {
             ),
         };
 
-        for _ in 0..self.spawn_count {
+        for _ in 0..self.game_data.spawn_count {
             let x = rng.gen_range(x_min..x_max);
             let y = rng.gen_range(y_min..y_max);
             self.diamonds.push(Sprite::Diamond(x, y));
         }
 
-        self.spawn_count += 1;
+        self.game_data.spawn_count += 1;
     }
 
     fn spawn_gate(&mut self) {
@@ -304,9 +314,9 @@ impl Game {
                     println!("Collision with diamond!");
                     print!(
                         "Game over!\nScore: {}\nMultiplier: {}\n",
-                        self.score, self.multiplier
+                        self.game_data.score, self.game_data.multiplier
                     );
-                    self.game_over = true;
+                    self.game_data.over = true;
                 }
             }
         };
@@ -333,16 +343,16 @@ impl Game {
                 println!("Collision with triangle corner!");
                 print!(
                     "Game over!\nScore: {}\nMultiplier: {}\n",
-                    self.score, self.multiplier
+                    self.game_data.score, self.game_data.multiplier
                 );
-                self.game_over = true;
+                self.game_data.over = true;
             }
         }
 
         for triangle in triangles_to_boom {
             let (triangle_x, triangle_y) = triangle.get_coords();
             self.boom(triangle_x, triangle_y);
-            self.pending_boom_locations.push((triangle_x, triangle_y));
+            self.game_data.pending_boom_locations.push((triangle_x, triangle_y));
         }
 
         // Now check multiplier collisions
@@ -354,16 +364,16 @@ impl Game {
         });
 
         for _mult in consumed_multipliers {
-            self.multiplier += 1;
+            self.game_data.multiplier += 1;
         }
     }
 
     fn key_down(&mut self, key: String) {
-        self.key_states.insert(key, true);
+        self.game_data.key_states.insert(key, true);
     }
 
     fn key_up(&mut self, key: String) {
-        self.key_states.insert(key, false);
+        self.game_data.key_states.insert(key, false);
     }
 
     fn circle_collides_with_edges(
@@ -420,7 +430,7 @@ async fn event_loop(state: State<'_, AppState>, window: Window) -> Result<(), ta
         {
             let mut game = state.game.write().await;
 
-            if !game.paused && !game.game_over {
+            if !game.game_data.paused && !game.game_data.over {
                 if last_enemy_spawn.elapsed() > Duration::from_millis(ENEMY_SPAWN_INTERVAL) {
                     game.spawn_enemy();
                     last_enemy_spawn = std::time::Instant::now();
@@ -434,13 +444,13 @@ async fn event_loop(state: State<'_, AppState>, window: Window) -> Result<(), ta
                 window.emit("update_sprites", &game.get_sprites())?;
 
                 // and now check for explosions
-                for (bx, by) in &game.pending_boom_locations {
+                for (bx, by) in &game.game_data.pending_boom_locations {
                     window.emit("explode", Sprite::Point(*bx, *by))?;
                 }
-                game.pending_boom_locations.clear();
+                game.game_data.pending_boom_locations.clear();
 
                 // Emit score and multiplier updates to the frontend
-                window.emit("update_score_multiplier", (&game.score, &game.multiplier))?;
+                window.emit("update_score_multiplier", (&game.game_data.score, &game.game_data.multiplier))?;
             }
         }
 
@@ -449,13 +459,13 @@ async fn event_loop(state: State<'_, AppState>, window: Window) -> Result<(), ta
 }
 
 #[tauri::command]
-async fn toggle_pause(state: State<'_, AppState>) -> Result<(), tauri::Error> {
+async fn handle_spacebar(state: State<'_, AppState>) -> Result<(), tauri::Error> {
     let mut game = state.game.write().await;
 
-    if game.game_over {
+    if game.game_data.over {
         game.reset_game();
     } else {
-        game.paused = !game.paused;
+        game.game_data.paused = !game.game_data.paused;
     }
 
     Ok(())
@@ -497,7 +507,7 @@ fn main() {
             event_loop,
             key_up,
             key_down,
-            toggle_pause,
+            handle_spacebar,
             get_game_constants
         ])
         .manage(AppState {
