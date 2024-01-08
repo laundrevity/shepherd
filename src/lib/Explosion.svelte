@@ -1,0 +1,44 @@
+<script lang="ts">
+	export let x: number;
+	export let y: number;
+	export let onAnimationEnd: Function;
+
+	// Trigger the cleanup after the animation ends
+	function handleAnimationEnd() {
+		onAnimationEnd();
+	}
+</script>
+
+<div
+	class="explosion"
+	on:animationend={handleAnimationEnd}
+	style="left: {x - 125}px; top: {y - 125}px;"
+></div>
+
+<style>
+	.explosion {
+		position: absolute;
+		width: 250px;
+		height: 250px;
+		background: radial-gradient(
+			circle,
+			rgba(255, 255, 0, 1) 0%,
+			rgba(255, 165, 0, 1) 70%,
+			rgba(255, 0, 0, 0) 100%
+		);
+		border-radius: 50%;
+		animation: explode 1s ease-out;
+		z-index: 1000;
+	}
+
+	@keyframes explode {
+		from {
+			transform: scale(0);
+			opacity: 1;
+		}
+		to {
+			transform: scale(1);
+			opacity: 0;
+		}
+	}
+</style>

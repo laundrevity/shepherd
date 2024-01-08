@@ -7,6 +7,7 @@ files = [
     "src/routes/+layout.svelte",
     "src/routes/+page.svelte",
     "src/lib/Canvas.svelte",
+    "src/lib/Explosion.svelte",
     "src/lib/index.ts",
     "src/global.css",
 ]

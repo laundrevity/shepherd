@@ -15,14 +15,16 @@ const PLAYER_SPEED: f64 = 5.0;
 const ENEMY_SPEED: f64 = 2.0;
 
 const TICK_CYCLE_MS: u64 = 16;
-const SPAWN_INTERVAL: u64 = 5000;
+const ENEMY_SPAWN_INTERVAL: u64 = 5000;
+const GATE_SPAWN_INTERVAL: u64 = 10000;
 
 const CIRCLE_RADIUS: f64 = 20.0;
 const DIAMOND_RADIUS: f64 = 20.0;
 const TRIANGLE_RADIUS: f64 = 50.0;
 const SQUARE_RADIUS: f64 = 5.0;
 
-const BOOM_RADIUS: f64 = 250.0;
+const BOOM_RADIUS: f64 = 125.0;
+const GATE_BUFFER: f64 = 50.0;
 
 #[derive(Clone, Debug, Serialize)]
 enum Sprite {
@@ -30,6 +32,7 @@ enum Sprite {
     Circle(f64, f64),
     Diamond(f64, f64),
     Square(f64, f64),
+    Point(f64, f64),
 }
 
 impl Sprite {
@@ -39,6 +42,7 @@ impl Sprite {
             Sprite::Circle(x, y) => (*x, *y),
             Sprite::Diamond(x, y) => (*x, *y),
             Sprite::Square(x, y) => (*x, *y),
+            _ => (0.0, 0.0),
         }
     }
 }
@@ -52,6 +56,8 @@ struct Game {
     score: u64,
     multiplier: u64,
     key_states: HashMap<String, bool>,
+    pending_boom_locations: Vec<(f64, f64)>,
+    paused: bool,
 }
 
 struct AppState {
@@ -68,6 +74,8 @@ impl Game {
             score: 0,
             multiplier: 1,
             key_states: HashMap::new(),
+            pending_boom_locations: Vec::new(),
+            paused: false,
         }
     }
 
@@ -115,11 +123,13 @@ impl Game {
     }
 
     fn tick(&mut self) {
-        self.rotate_triangles();
-        self.move_player();
-        self.move_enemies();
+        if !self.paused {
+            self.rotate_triangles();
+            self.move_player();
+            self.move_enemies();
 
-        self.check_collisions();
+            self.check_collisions();
+        }
     }
 
     fn rotate_triangles(&mut self) {
@@ -174,6 +184,14 @@ impl Game {
         };
 
         self.diamonds.push(Sprite::Diamond(x, y));
+    }
+
+    fn spawn_gate(&mut self) {
+        let mut rng = thread_rng();
+        let gx = rng.gen_range(GATE_BUFFER..(WINDOW_WIDTH - GATE_BUFFER));
+        let gy = rng.gen_range(GATE_BUFFER..(WINDOW_HEIGHT - GATE_BUFFER));
+        let gr = rng.gen_range(0.0..180.0);
+        self.triangles.push(Sprite::Triangle(gx, gy, gr))
     }
 
     fn move_enemies(&mut self) {
@@ -257,6 +275,7 @@ impl Game {
             let (tx, ty) = self.triangles[*index].get_coords();
             self.boom(tx, ty);
             self.triangles.remove(*index);
+            self.pending_boom_locations.push((tx, ty));
         }
 
         // Now check multiplier collisions
@@ -324,27 +343,50 @@ impl Game {
             dx * dx + dy * dy < radius * radius
         })
     }
+
+    fn toggle_pause(&mut self) {
+        self.paused = !self.paused;
+    }
 }
 
 #[tauri::command]
 async fn event_loop(state: State<'_, AppState>, window: Window) -> Result<(), tauri::Error> {
-    let mut last_spawn = std::time::Instant::now();
+    let mut last_enemy_spawn = std::time::Instant::now();
+    let mut last_gate_spawn = std::time::Instant::now();
 
     loop {
         {
             let mut game = state.game.write().await;
 
-            if last_spawn.elapsed() > Duration::from_millis(SPAWN_INTERVAL) {
+            if last_enemy_spawn.elapsed() > Duration::from_millis(ENEMY_SPAWN_INTERVAL) {
                 game.spawn_enemy();
-                last_spawn = std::time::Instant::now();
+                last_enemy_spawn = std::time::Instant::now();
             }
 
+            if last_gate_spawn.elapsed() > Duration::from_millis(GATE_SPAWN_INTERVAL) {
+                game.spawn_gate();
+                last_gate_spawn = std::time::Instant::now();
+            }
             game.tick();
             window.emit("update_sprites", &game.get_sprites())?;
+
+            // and now check for explosions
+            for (bx, by) in &game.pending_boom_locations {
+                window.emit("explode", Sprite::Point(*bx, *by))?;
+            }
+            game.pending_boom_locations.clear();
         }
 
         sleep(Duration::from_millis(TICK_CYCLE_MS)).await;
     }
+}
+
+#[tauri::command]
+async fn toggle_pause(state: State<'_, AppState>) -> Result<(), tauri::Error> {
+    let mut game = state.game.write().await;
+    game.toggle_pause();
+
+    Ok(())
 }
 
 // Update the move_player command to key_down and key_up
@@ -374,6 +416,7 @@ fn main() {
             event_loop,
             key_up,
             key_down,
+            toggle_pause,
             get_window_size
         ])
         .manage(AppState {

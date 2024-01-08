@@ -6,6 +6,8 @@
 	export let width: number;
 	export let height: number;
 
+	export let onCanvasMounted: Function;
+
 	type Triangle = [number, number, number]; // x, y, rotation
 	type Circle = [number, number]; // x, y
 	type Diamond = [number, number]; // x, y
@@ -19,6 +21,8 @@
 	onMount(() => {
 		ctx = canvas.getContext('2d');
 		listenForSpriteUpdates();
+
+		onCanvasMounted(canvas);
 	});
 
 	function listenForSpriteUpdates(): void {
