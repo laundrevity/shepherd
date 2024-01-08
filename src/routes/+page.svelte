@@ -9,19 +9,20 @@
 	let width: number;
 	let height: number;
 
-	type Point = [number, number];
-	let explosions = [];
-
-	let canvasElement;
-
-	function handleCanvasMounted(canvas) {
-		canvasElement = canvas;
+	interface Explosion {
+		x: number;
+		y: number;
+		id: number;
 	}
 
-	// Reactive statement to update explosions when canvasElement changes
-	$: if (canvasElement) {
-		// Update the positions of existing explosions, if necessary
-		explosions = explosions.map((e) => createExplosionProps(e));
+	type Point = [number, number];
+	type explosionPayload = { Point?: Point };
+	let explosions: Explosion[] = [];
+
+	let canvasElement: HTMLCanvasElement | null = null;
+
+	function handleCanvasMounted(canvas: HTMLCanvasElement) {
+		canvasElement = canvas;
 	}
 
 	onMount(() => {
@@ -31,7 +32,8 @@
 			// console.log('explosion payload: ', event.payload);
 
 			// Access the Point property which is an array
-			const [x, y] = event.payload.Point;
+			let explosionPayload = event.payload as explosionPayload;
+			const [x, y] = explosionPayload.Point ?? [0, 0];
 			console.log('adding explosion at (x,y): ', x, y);
 			explosions = [...explosions, { x, y, id: Math.random() }];
 		});
@@ -67,11 +69,11 @@
 		};
 	});
 
-	function removeExplosion(id) {
+	function removeExplosion(id: number) {
 		explosions = explosions.filter((e) => e.id !== id);
 	}
 
-	function createExplosionProps(explosion) {
+	function createExplosionProps(explosion: Explosion) {
 		return {
 			x: explosion.x,
 			y: explosion.y,

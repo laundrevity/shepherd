@@ -12,7 +12,7 @@ const WINDOW_WIDTH: f64 = 1200.0;
 const WINDOW_HEIGHT: f64 = 800.0;
 
 const PLAYER_SPEED: f64 = 5.0;
-const ENEMY_SPEED: f64 = 2.0;
+const ENEMY_SPEED: f64 = 4.0;
 
 const TICK_CYCLE_MS: u64 = 16;
 const ENEMY_SPAWN_INTERVAL: u64 = 5000;
@@ -45,6 +45,39 @@ impl Sprite {
             _ => (0.0, 0.0),
         }
     }
+
+    fn get_vertices(&self) -> Vec<(f64, f64)> {
+        let mut vertices = Vec::new();
+
+        match self {
+            Sprite::Triangle(x, y, rotation) => {
+                for i in 0..3 {
+                    let angle = 2.0 * std::f64::consts::PI / 3.0 * i as f64 + rotation.to_radians();
+                    vertices.push((
+                        x + TRIANGLE_RADIUS * angle.cos(),
+                        y + TRIANGLE_RADIUS * angle.sin(),
+                    ));
+                }
+            }
+            Sprite::Diamond(x, y) => {
+                vertices.push((*x, y - DIAMOND_RADIUS));
+                vertices.push((x + DIAMOND_RADIUS, *y));
+                vertices.push((*x, y + DIAMOND_RADIUS));
+                vertices.push((x - DIAMOND_RADIUS, *y));
+            }
+            Sprite::Square(x, y) => {
+                // Multiplier has radius 5 in backend so R^2 + R^2 = S^2 => S/2 = sqrt(2) * R / 2  = 7.07/2 = 3.53
+                let s = SQUARE_RADIUS / 2f64.sqrt();
+                vertices.push((x - s, y - s));
+                vertices.push((x - s, y + s));
+                vertices.push((x + s, y - s));
+                vertices.push((x + s, y + s));
+            }
+            _ => {}
+        }
+
+        vertices
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -58,6 +91,7 @@ struct Game {
     key_states: HashMap<String, bool>,
     pending_boom_locations: Vec<(f64, f64)>,
     paused: bool,
+    spawn_count: usize,
 }
 
 struct AppState {
@@ -76,6 +110,7 @@ impl Game {
             key_states: HashMap::new(),
             pending_boom_locations: Vec::new(),
             paused: false,
+            spawn_count: 1,
         }
     }
 
@@ -103,12 +138,13 @@ impl Game {
         // R: radius of circumscribing circle
         // s: side of circumscribed triangle
         let mut vertices = Vec::new();
-        let side_length = (3.0f64).sqrt() * TRIANGLE_RADIUS;
-        let height = side_length * (3.0f64).sqrt() / 2.0;
 
         for i in 0..3 {
             let angle = 2.0 * std::f64::consts::PI / 3.0 * i as f64 + rotation.to_radians();
-            vertices.push((x + height * angle.cos(), y + height * angle.sin()));
+            vertices.push((
+                x + TRIANGLE_RADIUS * angle.cos(),
+                y + TRIANGLE_RADIUS * angle.sin(),
+            ));
         }
 
         vertices
@@ -190,7 +226,7 @@ impl Game {
         let mut rng = thread_rng();
         let gx = rng.gen_range(GATE_BUFFER..(WINDOW_WIDTH - GATE_BUFFER));
         let gy = rng.gen_range(GATE_BUFFER..(WINDOW_HEIGHT - GATE_BUFFER));
-        let gr = rng.gen_range(0.0..180.0);
+        let gr = rng.gen_range(0.0..360.0);
         self.triangles.push(Sprite::Triangle(gx, gy, gr))
     }
 
@@ -218,17 +254,20 @@ impl Game {
         // check diamond-circle collision (= game over)
         if let Sprite::Circle(circle_x, circle_y) = self.player {
             for diamond in &self.diamonds {
-                if let Sprite::Diamond(diamond_x, diamond_y) = diamond {
-                    let distance =
-                        ((circle_x - diamond_x).powi(2) + (circle_y - diamond_y).powi(2)).sqrt();
-                    if distance < (CIRCLE_RADIUS + DIAMOND_RADIUS) {
-                        println!("Collision with diamond!");
-                        print!(
-                            "Game over!\nScore: {}\nMultiplier: {}\n",
-                            self.score, self.multiplier
-                        );
-                        std::process::exit(0);
-                    }
+                let diamond_vertices = diamond.get_vertices();
+                if self.circle_collides_with_edges(
+                    circle_x,
+                    circle_y,
+                    CIRCLE_RADIUS,
+                    &diamond_vertices,
+                ) {
+                    println!("Collision with diamond!");
+                    print!(
+                        "Game over!\nScore: {}\nMultiplier: {}\n",
+                        self.score, self.multiplier
+                    );
+                    // std::process::exit(0);
+                    self.paused = true;
                 }
             }
         };
@@ -244,12 +283,7 @@ impl Game {
             if let Sprite::Triangle(tx, ty, rot) = triangle {
                 let vertices = self.get_triangle_vertices(*tx, *ty, *rot);
 
-                if self.circle_collides_with_triangle_edges(
-                    circle_x,
-                    circle_y,
-                    circle_radius,
-                    &vertices,
-                ) {
+                if self.circle_collides_with_edges(circle_x, circle_y, circle_radius, &vertices) {
                     println!("Collision with triangle edge!");
                     boom_triangles_indices.push(index);
                 }
@@ -265,7 +299,8 @@ impl Game {
                         "Game over!\nScore: {}\nMultiplier: {}\n",
                         self.score, self.multiplier
                     );
-                    std::process::exit(0);
+                    // std::process::exit(0);
+                    self.paused = true;
                 }
             }
         }
@@ -299,7 +334,7 @@ impl Game {
         self.key_states.insert(key, false);
     }
 
-    fn circle_collides_with_triangle_edges(
+    fn circle_collides_with_edges(
         &self,
         cx: f64,                 // Circle's center x-coordinate
         cy: f64,                 // Circle's center y-coordinate

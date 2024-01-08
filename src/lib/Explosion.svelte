@@ -27,7 +27,7 @@
 			rgba(255, 0, 0, 0) 100%
 		);
 		border-radius: 50%;
-		animation: explode 1s ease-out;
+		animation: explode 0.5s ease-out;
 		z-index: 1000;
 	}
 
