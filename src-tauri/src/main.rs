@@ -13,6 +13,7 @@ const WINDOW_HEIGHT: f64 = 800.0;
 
 const PLAYER_SPEED: f64 = 5.0;
 const ENEMY_SPEED: f64 = 3.0;
+const MULTIPLIER_SPEED: f64 = 5.0;
 
 const TICK_CYCLE_MS: u64 = 16;
 const ENEMY_SPAWN_INTERVAL: u64 = 5000;
@@ -20,11 +21,24 @@ const GATE_SPAWN_INTERVAL: u64 = 10000;
 
 const CIRCLE_RADIUS: f64 = 20.0;
 const DIAMOND_RADIUS: f64 = 20.0;
-const TRIANGLE_RADIUS: f64 = 50.0;
+const TRIANGLE_RADIUS: f64 = 75.0;
 const SQUARE_RADIUS: f64 = 5.0;
 
-const BOOM_RADIUS: f64 = 125.0;
+const EXPLOSION_RADIUS: f64 = 175.0;
 const GATE_BUFFER: f64 = 50.0;
+const ENEMY_BUFFER: f64 = 100.0;
+const MULTIPLIER_ATTRACT_MIN: f64 = 75.0;
+
+#[derive(Serialize)]
+struct GameConstants {
+    window_width: f64,
+    window_height: f64,
+    circle_radius: f64,
+    diamond_radius: f64,
+    triangle_radius: f64,
+    square_radius: f64,
+    explosion_radius: f64,
+}
 
 #[derive(Clone, Debug, Serialize)]
 enum Sprite {
@@ -121,7 +135,7 @@ impl Game {
             .extract_if(|diamond| {
                 let (dx, dy) = diamond.get_coords();
                 // Keep the diamonds too far from the explosion
-                ((dx - bx).powi(2) + (dy - by).powi(2)).sqrt() < BOOM_RADIUS
+                ((dx - bx).powi(2) + (dy - by).powi(2)).sqrt() < EXPLOSION_RADIUS
             })
             .collect::<Vec<Sprite>>();
 
@@ -163,6 +177,7 @@ impl Game {
             self.rotate_triangles();
             self.move_player();
             self.move_enemies();
+            self.move_multipliers();
 
             self.check_collisions();
         }
@@ -213,21 +228,19 @@ impl Game {
     fn spawn_enemy(&mut self) {
         let mut rng = thread_rng();
 
-        let enemy_buffer = 75.0;
-
         let (x_min, x_max, y_min, y_max) = match rng.gen_range(0..4) {
-            0 => (0.0, enemy_buffer, 0.0, enemy_buffer),
-            1 => (WINDOW_WIDTH - enemy_buffer, WINDOW_WIDTH, 0.0, enemy_buffer),
+            0 => (0.0, ENEMY_BUFFER, 0.0, ENEMY_BUFFER),
+            1 => (WINDOW_WIDTH - ENEMY_BUFFER, WINDOW_WIDTH, 0.0, ENEMY_BUFFER),
             2 => (
-                WINDOW_WIDTH - enemy_buffer,
+                WINDOW_WIDTH - ENEMY_BUFFER,
                 WINDOW_WIDTH,
-                WINDOW_HEIGHT - enemy_buffer,
+                WINDOW_HEIGHT - ENEMY_BUFFER,
                 WINDOW_HEIGHT,
             ),
             _ => (
                 0.0,
-                enemy_buffer,
-                WINDOW_HEIGHT - enemy_buffer,
+                ENEMY_BUFFER,
+                WINDOW_HEIGHT - ENEMY_BUFFER,
                 WINDOW_HEIGHT,
             ),
         };
@@ -250,10 +263,7 @@ impl Game {
     }
 
     fn move_enemies(&mut self) {
-        let (player_x, player_y) = match self.player {
-            Sprite::Circle(x, y) => (x as f64, y as f64),
-            _ => return,
-        };
+        let (player_x, player_y) = self.player.get_coords();
 
         for diamond in self.diamonds.iter_mut() {
             if let Sprite::Diamond(ref mut x, ref mut y) = diamond {
@@ -262,14 +272,35 @@ impl Game {
                 let distance = (dx * dx + dy * dy).sqrt();
 
                 if distance > ENEMY_SPEED {
-                    *x = (*x + dx / distance * ENEMY_SPEED as f64).round();
-                    *y = (*y + dy / distance * ENEMY_SPEED as f64).round();
+                    *x = *x + dx / distance * ENEMY_SPEED;
+                    *y = *y + dy / distance * ENEMY_SPEED;
+                }
+            }
+        }
+    }
+
+    fn move_multipliers(&mut self) {
+        let (player_x, player_y) = self.player.get_coords();
+
+        for mult in self.multipliers.iter_mut() {
+            if let Sprite::Square(ref mut x, ref mut y) = mult {
+                let dx = player_x - *x;
+                let dy = player_y - *y;
+                let distance = (dx * dx + dy * dy).sqrt();
+
+                if distance < MULTIPLIER_ATTRACT_MIN {
+                    *x = *x + dx / distance * MULTIPLIER_SPEED;
+                    *y = *y + dy / distance * MULTIPLIER_SPEED;
                 }
             }
         }
     }
 
     fn check_collisions(&mut self) {
+        if self.paused {
+            return;
+        }
+
         // check diamond-circle collision (= game over)
         if let Sprite::Circle(circle_x, circle_y) = self.player {
             for diamond in &self.diamonds {
@@ -459,9 +490,18 @@ async fn key_up(state: State<'_, AppState>, key: String) -> Result<(), tauri::Er
 
     Ok(())
 }
+
 #[tauri::command]
-fn get_window_size() -> (f64, f64) {
-    (WINDOW_WIDTH, WINDOW_HEIGHT)
+fn get_game_constants() -> GameConstants {
+    GameConstants {
+        window_width: WINDOW_WIDTH,
+        window_height: WINDOW_HEIGHT,
+        circle_radius: CIRCLE_RADIUS,
+        diamond_radius: DIAMOND_RADIUS,
+        triangle_radius: TRIANGLE_RADIUS,
+        square_radius: SQUARE_RADIUS,
+        explosion_radius: EXPLOSION_RADIUS,
+    }
 }
 
 fn main() {
@@ -471,7 +511,7 @@ fn main() {
             key_up,
             key_down,
             toggle_pause,
-            get_window_size
+            get_game_constants
         ])
         .manage(AppState {
             game: RwLock::new(Game::new()),

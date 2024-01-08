@@ -6,18 +6,28 @@
 	import { listen } from '@tauri-apps/api/event';
 	import { onMount } from 'svelte';
 
-	let width: number;
-	let height: number;
-
 	interface Explosion {
 		x: number;
 		y: number;
 		id: number;
 	}
 
+	interface GameConstants {
+		window_width: number;
+		window_height: number;
+		circle_radius: number;
+		diamond_radius: number;
+		triangle_radius: number;
+		square_radius: number;
+		explosion_radius: number;
+	}
+
 	type Point = [number, number];
 	type explosionPayload = { Point?: Point };
+
 	let explosions: Explosion[] = [];
+	let gameConstants: GameConstants;
+	let constantsLoaded = false;
 
 	let canvasElement: HTMLCanvasElement | null = null;
 
@@ -26,23 +36,20 @@
 	}
 
 	onMount(() => {
+		(async () => {
+			gameConstants = (await invoke('get_game_constants')) as GameConstants;
+			constantsLoaded = true;
+		})();
+
 		invoke('event_loop');
 
 		listen('explode', (event) => {
-			// console.log('explosion payload: ', event.payload);
-
 			// Access the Point property which is an array
 			let explosionPayload = event.payload as explosionPayload;
 			const [x, y] = explosionPayload.Point ?? [0, 0];
 			console.log('adding explosion at (x,y): ', x, y);
 			explosions = [...explosions, { x, y, id: Math.random() }];
 		});
-
-		(async () => {
-			const size = (await invoke('get_window_size')) as number[];
-			width = size[0];
-			height = size[1];
-		})();
 
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (['w', 'a', 's', 'd'].includes(event.key)) {
@@ -77,15 +84,17 @@
 		return {
 			x: explosion.x,
 			y: explosion.y,
+			radius: gameConstants.explosion_radius,
 			onAnimationEnd: () => removeExplosion(explosion.id)
 		};
 	}
 </script>
 
 <main style="position: relative;">
-	<!-- <Explosion x={100} y={100} onAnimationEnd={() => {}} /> -->
-	<Canvas {width} {height} onCanvasMounted={handleCanvasMounted} />
-	{#each explosions as explosion (explosion.id)}
-		<Explosion {...createExplosionProps(explosion)} />
-	{/each}
+	{#if constantsLoaded}
+		<Canvas {...gameConstants} onCanvasMounted={handleCanvasMounted} />
+		{#each explosions as explosion (explosion.id)}
+			<Explosion {...createExplosionProps(explosion)} />
+		{/each}
+	{/if}
 </main>

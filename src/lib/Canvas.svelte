@@ -2,9 +2,12 @@
 	import { onMount } from 'svelte';
 	import { listen } from '@tauri-apps/api/event';
 
-	// Declare 'width' and 'height' as props
-	export let width: number;
-	export let height: number;
+	export let window_width: number;
+	export let window_height: number;
+	export let circle_radius: number;
+	export let diamond_radius: number;
+	export let triangle_radius: number;
+	export let square_radius: number;
 
 	export let onCanvasMounted: Function;
 
@@ -61,14 +64,14 @@
 		const rad = rotation * (Math.PI / 180);
 		if (ctx !== null) {
 			ctx.beginPath();
-			ctx.moveTo(x + 50 * Math.cos(rad), y + 50 * Math.sin(rad));
+			ctx.moveTo(x + triangle_radius * Math.cos(rad), y + triangle_radius * Math.sin(rad));
 			ctx.lineTo(
-				x + 50 * Math.cos(rad + (2 * Math.PI) / 3),
-				y + 50 * Math.sin(rad + (2 * Math.PI) / 3)
+				x + triangle_radius * Math.cos(rad + (2 * Math.PI) / 3),
+				y + triangle_radius * Math.sin(rad + (2 * Math.PI) / 3)
 			);
 			ctx.lineTo(
-				x + 50 * Math.cos(rad + (4 * Math.PI) / 3),
-				y + 50 * Math.sin(rad + (4 * Math.PI) / 3)
+				x + triangle_radius * Math.cos(rad + (4 * Math.PI) / 3),
+				y + triangle_radius * Math.sin(rad + (4 * Math.PI) / 3)
 			);
 			ctx.closePath();
 			ctx.strokeStyle = 'white';
@@ -79,7 +82,7 @@
 	function drawCircle(x: number, y: number): void {
 		if (ctx !== null) {
 			ctx.beginPath();
-			ctx.arc(x, y, 20, 0, 2 * Math.PI);
+			ctx.arc(x, y, circle_radius, 0, 2 * Math.PI);
 			ctx.fillStyle = 'red';
 			ctx.fill();
 		}
@@ -88,10 +91,10 @@
 	function drawDiamond(x: number, y: number): void {
 		if (ctx !== null) {
 			ctx.beginPath();
-			ctx.moveTo(x, y - 20);
-			ctx.lineTo(x + 20, y);
-			ctx.lineTo(x, y + 20);
-			ctx.lineTo(x - 20, y);
+			ctx.moveTo(x, y - diamond_radius);
+			ctx.lineTo(x + diamond_radius, y);
+			ctx.lineTo(x, y + diamond_radius);
+			ctx.lineTo(x - diamond_radius, y);
 			ctx.closePath();
 			ctx.fillStyle = 'blue';
 			ctx.fill();
@@ -101,11 +104,12 @@
 	function drawSquare(x: number, y: number): void {
 		// Multiplier had radius 5 in backend so R^2 + R^2 = S^2 => S/2 = sqrt(2) * R / 2  = 7.07/2 = 3.53
 		if (ctx !== null) {
+			const s = square_radius / Math.sqrt(2);
 			ctx.beginPath();
-			ctx.moveTo(x - 3.53, y - 3.53);
-			ctx.lineTo(x - 3.53, y + 3.53);
-			ctx.lineTo(x + 3.53, y + 3.53);
-			ctx.lineTo(x + 3.53, y - 3.53);
+			ctx.moveTo(x - s, y - s);
+			ctx.lineTo(x - s, y + s);
+			ctx.lineTo(x + s, y + s);
+			ctx.lineTo(x + s, y - s);
 			ctx.closePath();
 			ctx.fillStyle = 'green';
 			ctx.fill();
@@ -113,7 +117,7 @@
 	}
 </script>
 
-<canvas bind:this={canvas} {width} {height}></canvas>
+<canvas bind:this={canvas} width={window_width} height={window_height}></canvas>
 
 <style>
 	canvas {
