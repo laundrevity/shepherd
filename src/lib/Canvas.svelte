@@ -9,6 +9,9 @@
 	export let triangle_radius: number;
 	export let square_radius: number;
 
+	export let score: number;
+	export let multiplier: number;
+
 	export let onCanvasMounted: Function;
 
 	type Triangle = [number, number, number]; // x, y, rotation
@@ -57,6 +60,24 @@
 					drawSquare(x, y);
 				}
 			});
+
+			// Draw HUD
+			drawHUD();
+		}
+	}
+
+	function drawHUD(): void {
+		if (ctx !== null) {
+			ctx.font = '16px Arial';
+			ctx.textAlign = 'center'; // Align text to center
+			ctx.fillStyle = 'rgba(255, 255, 255, 0.4)'; // Semi-translucent white
+
+			// Calculate the center x position
+			const centerX = window_width / 2;
+
+			// Draw the score and multiplier
+			ctx.fillText(`${score}`, centerX, 30); // Draw score at top-center
+			ctx.fillText(`x${multiplier}`, centerX, 60); // Draw multiplier below score
 		}
 	}
 
@@ -94,17 +115,8 @@
 			ctx.arc(x, y, circle_radius, 0, 2 * Math.PI);
 			ctx.closePath();
 
-			ctx.fillStyle = 'black';
-			ctx.shadowColor = 'red';
-			ctx.shadowBlur = 30;
+			ctx.fillStyle = 'blue';
 			ctx.fill();
-
-			// Reset shadow settings before stroke
-			ctx.shadowColor = 'transparent';
-			ctx.shadowBlur = 0;
-
-			ctx.strokeStyle = 'red';
-			ctx.stroke();
 		}
 	}
 
@@ -117,17 +129,8 @@
 			ctx.lineTo(x - diamond_radius, y);
 			ctx.closePath();
 
-			ctx.fillStyle = 'rgba(0, 0, 0, 1)';
-			ctx.shadowColor = 'rgba(50, 50, 255, 1)'; // Blue shadow
-			ctx.shadowBlur = 30;
+			ctx.fillStyle = 'red';
 			ctx.fill();
-
-			// Reset shadow settings before stroke
-			ctx.shadowColor = 'transparent';
-			ctx.shadowBlur = 0;
-
-			ctx.strokeStyle = 'rgba(50, 50, 255, 1)';
-			ctx.stroke();
 		}
 	}
 
@@ -141,6 +144,7 @@
 			ctx.lineTo(x + s, y + s);
 			ctx.lineTo(x + s, y - s);
 			ctx.closePath();
+
 			ctx.fillStyle = 'green';
 			ctx.fill();
 		}

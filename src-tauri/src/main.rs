@@ -11,21 +11,21 @@ use tokio::time::{sleep, Duration};
 const WINDOW_WIDTH: f64 = 1200.0;
 const WINDOW_HEIGHT: f64 = 800.0;
 
-const PLAYER_SPEED: f64 = 5.0;
-const ENEMY_SPEED: f64 = 3.0;
-const MULTIPLIER_SPEED: f64 = 5.0;
+const PLAYER_SPEED: f64 = 3.0;
+const ENEMY_SPEED: f64 = 2.0;
+const MULTIPLIER_SPEED: f64 = 2.9;
 
-const TICK_CYCLE_MS: u64 = 16;
+const TICK_CYCLE_MS: u64 = 8;
 const ENEMY_SPAWN_INTERVAL: u64 = 5000;
 const GATE_SPAWN_INTERVAL: u64 = 10000;
 
-const CIRCLE_RADIUS: f64 = 20.0;
+const CIRCLE_RADIUS: f64 = 15.0;
 const DIAMOND_RADIUS: f64 = 25.0;
 const TRIANGLE_RADIUS: f64 = 75.0;
 const SQUARE_RADIUS: f64 = 5.0;
 
 const EXPLOSION_RADIUS: f64 = 150.0;
-const GATE_BUFFER: f64 = 50.0;
+const GATE_BUFFER: f64 = 25.0;
 const ENEMY_BUFFER: f64 = 150.0;
 const MULTIPLIER_ATTRACT_MIN: f64 = 75.0;
 
@@ -106,6 +106,7 @@ struct Game {
     pending_boom_locations: Vec<(f64, f64)>,
     paused: bool,
     spawn_count: usize,
+    game_over: bool,
 }
 
 struct AppState {
@@ -116,7 +117,7 @@ impl Game {
     fn new() -> Self {
         Self {
             player: Sprite::Circle(200.0, 200.0),
-            triangles: vec![Sprite::Triangle(100.0, 100.0, 0.0)],
+            triangles: Vec::new(),
             diamonds: Vec::new(),
             multipliers: Vec::new(),
             score: 0,
@@ -125,7 +126,19 @@ impl Game {
             pending_boom_locations: Vec::new(),
             paused: false,
             spawn_count: 1,
+            game_over: false,
         }
+    }
+
+    fn reset_game(&mut self) {
+        self.score = 0;
+        self.multiplier = 1;
+        self.spawn_count = 1;
+        self.player = Sprite::Circle(200.0, 200.0);
+        self.triangles.clear();
+        self.diamonds.clear();
+        self.multipliers.clear();
+        self.game_over = false;
     }
 
     fn boom(&mut self, bx: f64, by: f64) {
@@ -147,23 +160,6 @@ impl Game {
         }
     }
 
-    fn get_triangle_vertices(&self, x: f64, y: f64, rotation: f64) -> Vec<(f64, f64)> {
-        // R = s / sqrt(3)
-        // R: radius of circumscribing circle
-        // s: side of circumscribed triangle
-        let mut vertices = Vec::new();
-
-        for i in 0..3 {
-            let angle = 2.0 * std::f64::consts::PI / 3.0 * i as f64 + rotation.to_radians();
-            vertices.push((
-                x + TRIANGLE_RADIUS * angle.cos(),
-                y + TRIANGLE_RADIUS * angle.sin(),
-            ));
-        }
-
-        vertices
-    }
-
     fn get_sprites(&self) -> Vec<Sprite> {
         let mut sprites = vec![self.player.clone()];
         sprites.extend(self.triangles.clone());
@@ -173,14 +169,12 @@ impl Game {
     }
 
     fn tick(&mut self) {
-        if !self.paused {
-            self.rotate_triangles();
-            self.move_player();
-            self.move_enemies();
-            self.move_multipliers();
+        self.rotate_triangles();
+        self.move_player();
+        self.move_enemies();
+        self.move_multipliers();
 
-            self.check_collisions();
-        }
+        self.check_collisions();
     }
 
     fn rotate_triangles(&mut self) {
@@ -297,15 +291,11 @@ impl Game {
     }
 
     fn check_collisions(&mut self) {
-        if self.paused {
-            return;
-        }
-
         // check diamond-circle collision (= game over)
         if let Sprite::Circle(circle_x, circle_y) = self.player {
             for diamond in &self.diamonds {
                 let diamond_vertices = diamond.get_vertices();
-                if self.circle_collides_with_edges(
+                if Game::circle_collides_with_edges(
                     circle_x,
                     circle_y,
                     CIRCLE_RADIUS,
@@ -316,51 +306,43 @@ impl Game {
                         "Game over!\nScore: {}\nMultiplier: {}\n",
                         self.score, self.multiplier
                     );
-                    // std::process::exit(0);
-                    self.paused = true;
+                    self.game_over = true;
                 }
             }
         };
 
-        let (circle_x, circle_y, circle_radius) = match self.player {
-            Sprite::Circle(x, y) => (x, y, CIRCLE_RADIUS),
-            _ => panic!("Missing player sprite"),
-        };
+        let (circle_x, circle_y) = self.player.get_coords();
 
-        let mut boom_triangles_indices = Vec::new();
+        let triangles_to_boom = self
+            .triangles
+            .extract_if(|triangle| {
+                let vertices = triangle.get_vertices();
 
-        for (index, triangle) in self.triangles.iter().enumerate() {
-            if let Sprite::Triangle(tx, ty, rot) = triangle {
-                let vertices = self.get_triangle_vertices(*tx, *ty, *rot);
+                Game::circle_collides_with_edges(circle_x, circle_y, CIRCLE_RADIUS, &vertices)
+            })
+            .collect::<Vec<Sprite>>();
 
-                if self.circle_collides_with_edges(circle_x, circle_y, circle_radius, &vertices) {
-                    println!("Collision with triangle edge!");
-                    boom_triangles_indices.push(index);
-                }
-
-                if self.circle_collides_with_triangle_corners(
-                    circle_x,
-                    circle_y,
-                    circle_radius,
-                    &vertices,
-                ) {
-                    println!("Collision with triangle corner!");
-                    print!(
-                        "Game over!\nScore: {}\nMultiplier: {}\n",
-                        self.score, self.multiplier
-                    );
-                    // std::process::exit(0);
-                    self.paused = true;
-                }
+        for triangle in &self.triangles {
+            let vertices = triangle.get_vertices();
+            if self.circle_collides_with_triangle_corners(
+                circle_x,
+                circle_y,
+                CIRCLE_RADIUS,
+                &vertices,
+            ) {
+                println!("Collision with triangle corner!");
+                print!(
+                    "Game over!\nScore: {}\nMultiplier: {}\n",
+                    self.score, self.multiplier
+                );
+                self.game_over = true;
             }
         }
 
-        // Process the booms in reverse order to avoid index shifting issues
-        for index in boom_triangles_indices.iter().rev() {
-            let (tx, ty) = self.triangles[*index].get_coords();
-            self.boom(tx, ty);
-            self.triangles.remove(*index);
-            self.pending_boom_locations.push((tx, ty));
+        for triangle in triangles_to_boom {
+            let (triangle_x, triangle_y) = triangle.get_coords();
+            self.boom(triangle_x, triangle_y);
+            self.pending_boom_locations.push((triangle_x, triangle_y));
         }
 
         // Now check multiplier collisions
@@ -385,7 +367,6 @@ impl Game {
     }
 
     fn circle_collides_with_edges(
-        &self,
         cx: f64,                 // Circle's center x-coordinate
         cy: f64,                 // Circle's center y-coordinate
         radius: f64,             // Circle's radius
@@ -428,10 +409,6 @@ impl Game {
             dx * dx + dy * dy < radius * radius
         })
     }
-
-    fn toggle_pause(&mut self) {
-        self.paused = !self.paused;
-    }
 }
 
 #[tauri::command]
@@ -443,23 +420,28 @@ async fn event_loop(state: State<'_, AppState>, window: Window) -> Result<(), ta
         {
             let mut game = state.game.write().await;
 
-            if last_enemy_spawn.elapsed() > Duration::from_millis(ENEMY_SPAWN_INTERVAL) {
-                game.spawn_enemy();
-                last_enemy_spawn = std::time::Instant::now();
-            }
+            if !game.paused && !game.game_over {
+                if last_enemy_spawn.elapsed() > Duration::from_millis(ENEMY_SPAWN_INTERVAL) {
+                    game.spawn_enemy();
+                    last_enemy_spawn = std::time::Instant::now();
+                }
 
-            if last_gate_spawn.elapsed() > Duration::from_millis(GATE_SPAWN_INTERVAL) {
-                game.spawn_gate();
-                last_gate_spawn = std::time::Instant::now();
-            }
-            game.tick();
-            window.emit("update_sprites", &game.get_sprites())?;
+                if last_gate_spawn.elapsed() > Duration::from_millis(GATE_SPAWN_INTERVAL) {
+                    game.spawn_gate();
+                    last_gate_spawn = std::time::Instant::now();
+                }
+                game.tick();
+                window.emit("update_sprites", &game.get_sprites())?;
 
-            // and now check for explosions
-            for (bx, by) in &game.pending_boom_locations {
-                window.emit("explode", Sprite::Point(*bx, *by))?;
+                // and now check for explosions
+                for (bx, by) in &game.pending_boom_locations {
+                    window.emit("explode", Sprite::Point(*bx, *by))?;
+                }
+                game.pending_boom_locations.clear();
+
+                // Emit score and multiplier updates to the frontend
+                window.emit("update_score_multiplier", (&game.score, &game.multiplier))?;
             }
-            game.pending_boom_locations.clear();
         }
 
         sleep(Duration::from_millis(TICK_CYCLE_MS)).await;
@@ -469,7 +451,12 @@ async fn event_loop(state: State<'_, AppState>, window: Window) -> Result<(), ta
 #[tauri::command]
 async fn toggle_pause(state: State<'_, AppState>) -> Result<(), tauri::Error> {
     let mut game = state.game.write().await;
-    game.toggle_pause();
+
+    if game.game_over {
+        game.reset_game();
+    } else {
+        game.paused = !game.paused;
+    }
 
     Ok(())
 }

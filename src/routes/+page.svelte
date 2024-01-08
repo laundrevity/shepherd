@@ -24,6 +24,10 @@
 
 	type Point = [number, number];
 	type explosionPayload = { Point?: Point };
+	type ScoreMultiplierPayload = [number, number];
+
+	let score = 0; // Example score
+	let multiplier = 1; // Example multiplier
 
 	let explosions: Explosion[] = [];
 	let gameConstants: GameConstants;
@@ -49,6 +53,12 @@
 			const [x, y] = explosionPayload.Point ?? [0, 0];
 			console.log('adding explosion at (x,y): ', x, y);
 			explosions = [...explosions, { x, y, id: Math.random() }];
+		});
+
+		listen('update_score_multiplier', (event) => {
+			const [updatedScore, updatedMultiplier] = event.payload as ScoreMultiplierPayload;
+			score = updatedScore;
+			multiplier = updatedMultiplier;
 		});
 
 		const handleKeyDown = (event: KeyboardEvent) => {
@@ -92,7 +102,7 @@
 
 <main style="position: relative;">
 	{#if constantsLoaded}
-		<Canvas {...gameConstants} onCanvasMounted={handleCanvasMounted} />
+		<Canvas {...gameConstants} {score} {multiplier} onCanvasMounted={handleCanvasMounted} />
 		{#each explosions as explosion (explosion.id)}
 			<Explosion {...createExplosionProps(explosion)} />
 		{/each}
