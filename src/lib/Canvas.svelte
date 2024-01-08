@@ -64,6 +64,8 @@
 		const rad = rotation * (Math.PI / 180);
 		if (ctx !== null) {
 			ctx.beginPath();
+			ctx.shadowBlur = 30;
+			ctx.shadowColor = 'magenta';
 			ctx.moveTo(x + triangle_radius * Math.cos(rad), y + triangle_radius * Math.sin(rad));
 			ctx.lineTo(
 				x + triangle_radius * Math.cos(rad + (2 * Math.PI) / 3),
@@ -76,6 +78,13 @@
 			ctx.closePath();
 			ctx.strokeStyle = 'white';
 			ctx.stroke();
+
+			ctx.fillStyle = 'black';
+			ctx.fill();
+
+			// Reset shadow settings before stroke
+			ctx.shadowColor = 'transparent';
+			ctx.shadowBlur = 0;
 		}
 	}
 
@@ -83,8 +92,19 @@
 		if (ctx !== null) {
 			ctx.beginPath();
 			ctx.arc(x, y, circle_radius, 0, 2 * Math.PI);
-			ctx.fillStyle = 'red';
+			ctx.closePath();
+
+			ctx.fillStyle = 'black';
+			ctx.shadowColor = 'red';
+			ctx.shadowBlur = 30;
 			ctx.fill();
+
+			// Reset shadow settings before stroke
+			ctx.shadowColor = 'transparent';
+			ctx.shadowBlur = 0;
+
+			ctx.strokeStyle = 'red';
+			ctx.stroke();
 		}
 	}
 
@@ -96,8 +116,18 @@
 			ctx.lineTo(x, y + diamond_radius);
 			ctx.lineTo(x - diamond_radius, y);
 			ctx.closePath();
-			ctx.fillStyle = 'blue';
+
+			ctx.fillStyle = 'rgba(0, 0, 0, 1)';
+			ctx.shadowColor = 'rgba(50, 50, 255, 1)'; // Blue shadow
+			ctx.shadowBlur = 30;
 			ctx.fill();
+
+			// Reset shadow settings before stroke
+			ctx.shadowColor = 'transparent';
+			ctx.shadowBlur = 0;
+
+			ctx.strokeStyle = 'rgba(50, 50, 255, 1)';
+			ctx.stroke();
 		}
 	}
 
