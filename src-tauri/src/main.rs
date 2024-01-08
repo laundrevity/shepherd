@@ -12,7 +12,7 @@ const WINDOW_WIDTH: f64 = 1200.0;
 const WINDOW_HEIGHT: f64 = 800.0;
 
 const PLAYER_SPEED: f64 = 5.0;
-const ENEMY_SPEED: f64 = 4.0;
+const ENEMY_SPEED: f64 = 3.0;
 
 const TICK_CYCLE_MS: u64 = 16;
 const ENEMY_SPAWN_INTERVAL: u64 = 5000;
@@ -212,14 +212,33 @@ impl Game {
 
     fn spawn_enemy(&mut self) {
         let mut rng = thread_rng();
-        let (x, y) = match rng.gen_range(0..4) {
-            0 => (0.0, 0.0),
-            1 => (WINDOW_WIDTH, 0.0),
-            2 => (0.0, WINDOW_HEIGHT),
-            _ => (WINDOW_WIDTH, WINDOW_HEIGHT),
+
+        let enemy_buffer = 75.0;
+
+        let (x_min, x_max, y_min, y_max) = match rng.gen_range(0..4) {
+            0 => (0.0, enemy_buffer, 0.0, enemy_buffer),
+            1 => (WINDOW_WIDTH - enemy_buffer, WINDOW_WIDTH, 0.0, enemy_buffer),
+            2 => (
+                WINDOW_WIDTH - enemy_buffer,
+                WINDOW_WIDTH,
+                WINDOW_HEIGHT - enemy_buffer,
+                WINDOW_HEIGHT,
+            ),
+            _ => (
+                0.0,
+                enemy_buffer,
+                WINDOW_HEIGHT - enemy_buffer,
+                WINDOW_HEIGHT,
+            ),
         };
 
-        self.diamonds.push(Sprite::Diamond(x, y));
+        for _ in 0..self.spawn_count {
+            let x = rng.gen_range(x_min..x_max);
+            let y = rng.gen_range(y_min..y_max);
+            self.diamonds.push(Sprite::Diamond(x, y));
+        }
+
+        self.spawn_count += 1;
     }
 
     fn spawn_gate(&mut self) {
