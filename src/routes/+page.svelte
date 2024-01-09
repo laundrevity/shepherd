@@ -66,7 +66,7 @@
 				invoke('key_down', { key: event.key });
 			}
 			if (event.key === ' ') {
-				invoke('toggle_pause');
+				invoke('handle_spacebar');
 				event.preventDefault(); // Prevent default action of the spacebar
 			}
 		};

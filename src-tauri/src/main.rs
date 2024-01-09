@@ -28,7 +28,7 @@ async fn event_loop(state: State<'_, AppState>, window: Window) -> Result<(), ta
         {
             let mut game = state.game.write().await;
 
-            if !game.paused && !game.game_over {
+            if !game.game_data.paused && !game.game_data.over {
                 if last_enemy_spawn.elapsed() > Duration::from_millis(ENEMY_SPAWN_INTERVAL) {
                     game.spawn_enemy();
                     last_enemy_spawn = std::time::Instant::now();
@@ -42,13 +42,13 @@ async fn event_loop(state: State<'_, AppState>, window: Window) -> Result<(), ta
                 window.emit("update_sprites", &game.get_sprites())?;
 
                 // and now check for explosions
-                for (bx, by) in &game.pending_boom_locations {
+                for (bx, by) in &game.game_data.pending_boom_locations {
                     window.emit("explode", Sprite::Point(*bx, *by))?;
                 }
-                game.pending_boom_locations.clear();
+                game.game_data.pending_boom_locations.clear();
 
                 // Emit score and multiplier updates to the frontend
-                window.emit("update_score_multiplier", (&game.score, &game.multiplier))?;
+                window.emit("update_score_multiplier", (&game.game_data.score, &game.game_data.multiplier))?;
             }
         }
 
@@ -57,13 +57,13 @@ async fn event_loop(state: State<'_, AppState>, window: Window) -> Result<(), ta
 }
 
 #[tauri::command]
-async fn toggle_pause(state: State<'_, AppState>) -> Result<(), tauri::Error> {
+async fn handle_spacebar(state: State<'_, AppState>) -> Result<(), tauri::Error> {
     let mut game = state.game.write().await;
 
-    if game.game_over {
+    if game.game_data.over {
         game.reset_game();
     } else {
-        game.paused = !game.paused;
+        game.game_data.paused = !game.game_data.paused;
     }
 
     Ok(())
@@ -97,7 +97,7 @@ fn main() {
             event_loop,
             key_up,
             key_down,
-            toggle_pause,
+            handle_spacebar,
             get_game_constants
         ])
         .manage(AppState {
