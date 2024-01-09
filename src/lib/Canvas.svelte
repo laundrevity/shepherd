@@ -85,8 +85,10 @@
 		const rad = rotation * (Math.PI / 180);
 		if (ctx !== null) {
 			ctx.beginPath();
+
 			ctx.shadowBlur = 30;
-			ctx.shadowColor = 'magenta';
+			ctx.shadowColor = 'white';
+
 			ctx.moveTo(x + triangle_radius * Math.cos(rad), y + triangle_radius * Math.sin(rad));
 			ctx.lineTo(
 				x + triangle_radius * Math.cos(rad + (2 * Math.PI) / 3),

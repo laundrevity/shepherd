@@ -2,6 +2,11 @@ import subprocess
 
 files = [
     "src-tauri/src/main.rs",
+    "src-tauri/src/game.rs",
+    "src-tauri/src/sprites.rs",
+    "src-tauri/src/traits.rs",
+    "src-tauri/src/constants.rs",
+    "src-tauri/src/collision.rs",
     "src-tauri/tauri.conf.json",
     "src/routes/+layout.ts",
     "src/routes/+layout.svelte",
