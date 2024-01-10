@@ -3,7 +3,7 @@ use crate::game::GameState;
 use crate::traits::Shape;
 
 pub fn check_edge_collision<S: Shape>(shape: &S, game_state: &GameState) -> bool {
-    let (cx, cy) = game_state.player.get_coords();
+    let (cx, cy) = game_state.player.sprite.get_coords();
     let vertices = shape.get_vertices();
 
     vertices
@@ -31,7 +31,7 @@ pub fn check_edge_collision<S: Shape>(shape: &S, game_state: &GameState) -> bool
 }
 
 pub fn check_corner_collision<S: Shape>(shape: &S, game_state: &GameState) -> bool {
-    let (cx, cy) = game_state.player.get_coords();
+    let (cx, cy) = game_state.player.sprite.get_coords();
     let vertices = shape.get_vertices();
 
     vertices.iter().any(|&(vx, vy)| {

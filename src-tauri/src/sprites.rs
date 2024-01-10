@@ -16,12 +16,44 @@ pub enum Sprite {
     Point(f64, f64),
 }
 
-impl Entity for Sprite {
+#[derive(Clone, Debug, Default)]
+pub struct GameObjectData {
+    pub rotation_speed: Option<f64>,
+    pub velocity: Option<(f64, f64)>,
+    pub spawn_time: Option<std::time::Instant>,
+}
+
+impl GameObjectData {
+    fn new() -> Self {
+        Self {
+            rotation_speed: None,
+            velocity: None,
+            spawn_time: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct GameObject {
+    pub sprite: Sprite,
+    pub data: GameObjectData,
+}
+
+impl GameObject {
+    pub fn new(sprite: Sprite) -> Self {
+        Self {
+            sprite,
+            data: GameObjectData::new(),
+        }
+    }
+}
+
+impl Entity for GameObject {
     fn update(&mut self, game_state: GameState) {
-        match self {
+        match &mut self.sprite {
             // Rotate gate
             Sprite::Triangle(_, _, rotation) => {
-                *rotation += 1.0;
+                *rotation += self.data.rotation_speed.unwrap_or(1.0);
             }
 
             // Move player according to WASD states
@@ -63,7 +95,7 @@ impl Entity for Sprite {
 
             // Move enemy towards player
             Sprite::Diamond(ex, ey) => {
-                let (px, py) = game_state.player.get_coords();
+                let (px, py) = game_state.player.sprite.get_coords();
 
                 let dx = px - *ex;
                 let dy = py - *ey;
@@ -74,9 +106,19 @@ impl Entity for Sprite {
                 }
             }
 
-            // Move multiplier towards player
+            // Move multiplier using velocity
+            // or towards player
             Sprite::Square(mx, my) => {
-                let (px, py) = game_state.player.get_coords();
+                if let Some((vx, vy)) = self.data.velocity.as_mut() {
+                    *mx += *vx;
+                    *my += *vy;
+
+                    // Apply decay to velocity
+                    *vx *= 0.925;
+                    *vy *= 0.925;
+                }
+
+                let (px, py) = game_state.player.sprite.get_coords();
 
                 let dx = px - *mx;
                 let dy = py - *my;

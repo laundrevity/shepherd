@@ -42,7 +42,15 @@
 		if (ctx !== null) {
 			ctx.fillStyle = 'black';
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
-			sprites.forEach((sprite) => {
+
+			// Sort sprites so that triangles are drawn first
+			const sortedSprites = [...sprites].sort((a, b) => {
+				if ('Triangle' in a && !('Triangle' in b)) return -1;
+				if ('Triangle' in b && !('Triangle' in a)) return 1;
+				return 0;
+			});
+
+			sortedSprites.forEach((sprite) => {
 				if (sprite.Triangle) {
 					const [x, y, rotation] = sprite.Triangle;
 					drawTriangle(x, y, rotation);
@@ -102,7 +110,7 @@
 			ctx.strokeStyle = 'white';
 			ctx.stroke();
 
-			ctx.fillStyle = 'black';
+			ctx.fillStyle = 'white';
 			ctx.fill();
 
 			// Reset shadow settings before stroke
@@ -114,11 +122,22 @@
 	function drawCircle(x: number, y: number): void {
 		if (ctx !== null) {
 			ctx.beginPath();
+
+			ctx.shadowBlur = 30;
+			ctx.shadowColor = 'rgba(125, 125, 255, 1.0)';
+
 			ctx.arc(x, y, circle_radius, 0, 2 * Math.PI);
 			ctx.closePath();
 
-			ctx.fillStyle = 'blue';
+			ctx.strokeStyle = 'rgba(125, 125, 255, 1.0)';
+			ctx.stroke();
+
+			ctx.fillStyle = 'black';
 			ctx.fill();
+
+			// Reset shadow settings before stroke
+			ctx.shadowColor = 'transparent';
+			ctx.shadowBlur = 0;
 		}
 	}
 
@@ -131,7 +150,10 @@
 			ctx.lineTo(x - diamond_radius, y);
 			ctx.closePath();
 
-			ctx.fillStyle = 'red';
+			ctx.strokeStyle = 'black';
+			ctx.stroke();
+
+			ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
 			ctx.fill();
 		}
 	}

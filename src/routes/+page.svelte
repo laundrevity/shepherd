@@ -42,6 +42,7 @@
 	onMount(() => {
 		(async () => {
 			gameConstants = (await invoke('get_game_constants')) as GameConstants;
+			console.log('got GameConstants');
 			constantsLoaded = true;
 		})();
 
@@ -66,6 +67,7 @@
 				invoke('key_down', { key: event.key });
 			}
 			if (event.key === ' ') {
+				console.log('handling spacebar');
 				invoke('handle_spacebar');
 				event.preventDefault(); // Prevent default action of the spacebar
 			}

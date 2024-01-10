@@ -3,13 +3,12 @@ use serde::Serialize;
 pub const WINDOW_WIDTH: f64 = 1200.0;
 pub const WINDOW_HEIGHT: f64 = 800.0;
 
-pub const PLAYER_SPEED: f64 = 3.0;
-pub const ENEMY_SPEED: f64 = 2.0;
-pub const MULTIPLIER_SPEED: f64 = 2.9;
+pub const PLAYER_SPEED: f64 = 2.5;
+pub const ENEMY_SPEED: f64 = 1.75;
 
 pub const TICK_CYCLE_MS: u64 = 8;
 pub const ENEMY_SPAWN_INTERVAL: u64 = 5000;
-pub const GATE_SPAWN_INTERVAL: u64 = 10000;
+pub const GATE_SPAWN_INTERVAL: u64 = 7500;
 
 pub const CIRCLE_RADIUS: f64 = 15.0;
 pub const DIAMOND_RADIUS: f64 = 25.0;
@@ -18,8 +17,11 @@ pub const SQUARE_RADIUS: f64 = 5.0;
 
 pub const EXPLOSION_RADIUS: f64 = 150.0;
 pub const GATE_BUFFER: f64 = 25.0;
-pub const ENEMY_BUFFER: f64 = 150.0;
+pub const ENEMY_BUFFER_FRAC: f64 = 0.25;
+
 pub const MULTIPLIER_ATTRACT_MIN: f64 = 75.0;
+pub const MULTIPLIER_SPEED: f64 = 0.9 * PLAYER_SPEED;
+pub const MULTIPLIER_LIFETIME_MS: u64 = 5000;
 
 #[derive(Serialize)]
 pub struct GameConstants {

@@ -21,8 +21,8 @@
 		position: absolute;
 		background: radial-gradient(
 			circle,
-			rgba(255, 255, 0, 1) 0%,
-			rgba(255, 165, 0, 1) 70%,
+			rgb(109, 255, 255) 0%,
+			rgb(69, 122, 255) 70%,
 			rgba(255, 0, 0, 0) 100%
 		);
 		border-radius: 50%;
