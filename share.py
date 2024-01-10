@@ -9,6 +9,7 @@ files = [
     "src-tauri/src/traits.rs",
     "src-tauri/src/constants.rs",
     "src-tauri/src/collision.rs",
+    "src-tauri/src/game_objects.rs",
     "src-tauri/tauri.conf.json",
     "src/routes/+layout.ts",
     "src/routes/+layout.svelte",
