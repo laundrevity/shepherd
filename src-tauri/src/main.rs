@@ -5,6 +5,7 @@
 mod collision;
 mod constants;
 mod game;
+mod game_objects;
 mod sprites;
 mod traits;
 

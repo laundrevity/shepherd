@@ -3,25 +3,26 @@ use crate::constants::{
     CIRCLE_RADIUS, ENEMY_BUFFER_FRAC, EXPLOSION_RADIUS, GATE_BUFFER, MULTIPLIER_LIFETIME_MS,
     SQUARE_RADIUS, WINDOW_HEIGHT, WINDOW_WIDTH,
 };
-use crate::sprites::{GameObject, GameObjectData, Sprite};
+use crate::game_objects::GameObject;
+use crate::sprites::Sprite;
 use crate::traits::{Entity, Shape};
 
 use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 
-#[derive(Clone, Debug)]
-pub struct GameState {
-    pub keys: HashSet<String>,
-    pub player: GameObject,
-}
-
 impl GameState {
     pub fn new() -> Self {
         Self {
             keys: HashSet::new(),
-            player: GameObject::new(Sprite::Circle(WINDOW_WIDTH / 2.0, WINDOW_HEIGHT / 2.0)),
+            player: GameObject::new_player(),
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct GameState {
+    pub keys: HashSet<String>,
+    pub player: GameObject,
 }
 
 #[derive(Clone, Debug)]
@@ -65,19 +66,20 @@ impl Game {
 
         let boomed_diamonds = self
             .game_objects
-            .extract_if(|game_object| {
-                match game_object.sprite {
-                    Sprite::Diamond(dx, dy) => {
-                        // Keep the diamonds too far from the explosion
-                        ((dx - bx).powi(2) + (dy - by).powi(2)).sqrt() < EXPLOSION_RADIUS
+            .extract_if(|game_object| match game_object {
+                GameObject::Enemy(sprite, _) => {
+                    if let Sprite::Diamond(ex, ey) = sprite {
+                        ((*ex - bx).powi(2) + (*ey - by).powi(2)).sqrt() < EXPLOSION_RADIUS
+                    } else {
+                        false
                     }
-                    _ => false,
                 }
+                _ => false,
             })
             .collect::<Vec<GameObject>>();
 
-        for diamond in boomed_diamonds {
-            let (dx, dy) = diamond.sprite.get_coords();
+        for diamond_object in boomed_diamonds {
+            let (dx, dy) = diamond_object.get_sprite().get_coords();
             let distance = ((dx - bx).powi(2) + (dy - by).powi(2)).sqrt();
 
             let velocity_magnitude = boom_strength / (distance + epsilon);
@@ -89,21 +91,17 @@ impl Game {
 
             // increment score and create a multiplier
             self.score += self.multiplier;
-            self.game_objects.push(GameObject {
-                sprite: Sprite::Square(dx, dy),
-                data: GameObjectData {
-                    velocity: Some((velocity_x, velocity_y)),
-                    spawn_time: Some(std::time::Instant::now()),
-                    ..GameObjectData::default()
-                },
-            });
+            self.game_objects.push(GameObject::new_multiplier(
+                &(dx, dy),
+                &(velocity_x, velocity_y),
+            ));
         }
     }
 
     pub fn get_sprites(&self) -> Vec<Sprite> {
-        let mut sprites = vec![self.game_state.player.sprite.clone()];
+        let mut sprites = vec![self.game_state.player.get_sprite().clone()];
         for game_object in &self.game_objects {
-            sprites.push(game_object.sprite.clone())
+            sprites.push(game_object.get_sprite().clone())
         }
         sprites
     }
@@ -147,8 +145,7 @@ impl Game {
         for _ in 0..self.spawn_count {
             let x = rng.gen_range(x_min..x_max);
             let y = rng.gen_range(y_min..y_max);
-            self.game_objects
-                .push(GameObject::new(Sprite::Diamond(x, y)));
+            self.game_objects.push(GameObject::new_enemy(&(x, y)));
         }
 
         self.spawn_count += 1;
@@ -160,24 +157,18 @@ impl Game {
         let gy = rng.gen_range(GATE_BUFFER..(WINDOW_HEIGHT - GATE_BUFFER));
         let gr = rng.gen_range(0.0..360.0);
         let gate_spin = rng.gen_range(-1.0..1.0);
-        self.game_objects.push(GameObject {
-            sprite: Sprite::Triangle(gx, gy, gr),
-            data: GameObjectData {
-                rotation_speed: Some(gate_spin),
-                spawn_time: Some(std::time::Instant::now()),
-                ..GameObjectData::default()
-            },
-        });
+        self.game_objects
+            .push(GameObject::new_gate(&(gx, gy), gr, gate_spin));
     }
 
     fn check_collisions(&mut self) {
-        let (cx, cy) = self.game_state.player.sprite.get_coords();
+        let (cx, cy) = self.game_state.player.get_sprite().get_coords();
 
         let triangles_to_boom = self
             .game_objects
-            .extract_if(|game_object| match game_object.sprite {
+            .extract_if(|game_object| match game_object.get_sprite() {
                 Sprite::Triangle(_, _, _) => {
-                    check_edge_collision(&game_object.sprite, &self.game_state)
+                    check_edge_collision(game_object.get_sprite(), &self.game_state)
                 }
                 _ => false,
             })
@@ -185,16 +176,15 @@ impl Game {
 
         if triangles_to_boom.is_empty() {
             for game_object in &self.game_objects {
-                match game_object.sprite {
-                    Sprite::Triangle(..) => {
-                        if game_object
-                            .data
+                match game_object {
+                    GameObject::Gate(sprite, data) => {
+                        if data
                             .spawn_time
                             .unwrap_or(std::time::Instant::now())
                             .elapsed()
                             > std::time::Duration::from_millis(5000)
                         {
-                            if check_corner_collision(&game_object.sprite, &self.game_state) {
+                            if check_corner_collision(sprite, &self.game_state) {
                                 println!("Collision with triangle corner!");
                                 print!(
                                     "Game over!\nScore: {}\nMultiplier: {}\n",
@@ -209,10 +199,10 @@ impl Game {
             }
 
             // check enemy-player collision (=> game over, you lose, good day sir!)
-            for data in &self.game_objects {
-                match data.sprite {
-                    Sprite::Diamond(_, _) => {
-                        if check_edge_collision(&data.sprite, &self.game_state) {
+            for game_object in &self.game_objects {
+                match game_object {
+                    GameObject::Enemy(sprite, _) => {
+                        if check_edge_collision(sprite, &self.game_state) {
                             println!("Collision with enemy!");
                             print!(
                                 "Game over!\nScore: {}\nMultiplier: {}\n",
@@ -226,7 +216,7 @@ impl Game {
             }
         } else {
             for triangle in triangles_to_boom {
-                let (triangle_x, triangle_y) = triangle.sprite.get_coords();
+                let (triangle_x, triangle_y) = triangle.get_sprite().get_coords();
                 self.boom(triangle_x, triangle_y);
                 self.pending_boom_locations.push((triangle_x, triangle_y));
             }
@@ -235,9 +225,9 @@ impl Game {
         // Now check multiplier collisions
         let squares_to_consume = self
             .game_objects
-            .extract_if(|data| match data.sprite {
-                Sprite::Square(_, _) => {
-                    let (mx, my) = data.sprite.get_coords();
+            .extract_if(|game_object| match game_object {
+                GameObject::Multiplier(sprite, _) => {
+                    let (mx, my) = sprite.get_coords();
                     let dx = cx - mx;
                     let dy = cy - my;
                     let distance = (dx * dx + dy * dy).sqrt();
@@ -253,18 +243,15 @@ impl Game {
     }
 
     fn cull(&mut self) {
-        self.game_objects
-            .retain(|game_object| match game_object.sprite {
-                Sprite::Square(..) => {
-                    game_object
-                        .data
-                        .spawn_time
-                        .unwrap_or(std::time::Instant::now())
-                        .elapsed()
-                        < std::time::Duration::from_millis(MULTIPLIER_LIFETIME_MS)
-                }
-                _ => true,
-            });
+        self.game_objects.retain(|game_object| match game_object {
+            GameObject::Multiplier(_, data) => {
+                data.spawn_time
+                    .unwrap_or(std::time::Instant::now())
+                    .elapsed()
+                    < std::time::Duration::from_millis(MULTIPLIER_LIFETIME_MS)
+            }
+            _ => true,
+        });
     }
 
     pub fn key_down(&mut self, key: String) {
